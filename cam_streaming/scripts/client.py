@@ -1,30 +1,35 @@
 import socket
 import cv2
+import struct
+import pickle
 
-def send_image(server_ip, server_port, image_path):
+def start_video_client(server_ip, server_port):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((server_ip, server_port))
 
-    # Ler a imagem usando OpenCV
-    img = cv2.imread(image_path)
+    cam = cv2.VideoCapture(0)
+    while True:
+        ret, frame = cam.read()
+        if not ret:
+            break
 
-    # Codificar a imagem em formato JPEG
-    _, img_encoded = cv2.imencode('.jpg', img)
+        # Codificar o quadro em JPEG
+        _, frame_encoded = cv2.imencode('.jpg', frame)
+        data = pickle.dumps(frame_encoded)
 
-    # Converter para bytes
-    data = img_encoded.tobytes()
+        # Enviar o tamanho do quadro e o quadro em si
+        message_size = struct.pack("Q", len(data))
+        client_socket.sendall(message_size + data)
 
-    # Enviar o tamanho da imagem
-    client_socket.send(str(len(data)).encode().ljust(16))
-
-    # Enviar a imagem
-    client_socket.sendall(data)
-    print(f"Imagem '{image_path}' enviada com sucesso.")
+        cv2.imshow("Cliente Streaming", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
     client_socket.close()
+    cam.release()
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     server_ip = '192.168.0.7'  # Substitua pelo IP do servidor
     server_port = 5002
-    image_path = 'caminho/para/sua/imagem.jpg'  # Substitua pelo caminho da imagem
-    send_image(server_ip, server_port, image_path)
+    start_video_client(server_ip, server_port)
