@@ -2,31 +2,40 @@ import socket
 import cv2
 import struct
 import pickle
+import numpy as np
 
 def start_video_client(server_ip, server_port):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((server_ip, server_port))
 
-    cam = cv2.VideoCapture(0)
+    data = b""
+    payload_size = struct.calcsize("Q")
+
     while True:
-        ret, frame = cam.read()
-        if not ret:
-            break
+        while len(data) < payload_size:
+            packet = client_socket.recv(4096)
+            if not packet:
+                break
+            data += packet
 
-        # Codificar o quadro em JPEG
-        _, frame_encoded = cv2.imencode('.jpg', frame)
-        data = pickle.dumps(frame_encoded)
+        packed_msg_size = data[:payload_size]
+        data = data[payload_size:]
+        msg_size = struct.unpack("Q", packed_msg_size)[0]
 
-        # Enviar o tamanho do quadro e o quadro em si
-        message_size = struct.pack("Q", len(data))
-        client_socket.sendall(message_size + data)
+        while len(data) < msg_size:
+            data += client_socket.recv(4096)
+
+        frame_data = data[:msg_size]
+        data = data[msg_size:]
+
+        frame = pickle.loads(frame_data)
+        frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
 
         cv2.imshow("Cliente Streaming", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     client_socket.close()
-    cam.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":

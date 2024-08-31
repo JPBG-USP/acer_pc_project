@@ -1,6 +1,7 @@
 import socket
 import cv2
-import numpy as np
+import struct
+import pickle
 
 def start_video_server(host='0.0.0.0', port=5002):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -11,34 +12,23 @@ def start_video_server(host='0.0.0.0', port=5002):
     client_socket, client_address = server_socket.accept()
     print(f"Conexão estabelecida com {client_address}")
 
-    data = b""
-    payload_size = struct.calcsize("Q")
+    cap = cv2.VideoCapture(0)  # Captura de vídeo da webcam
+
     while True:
-        while len(data) < payload_size:
-            packet = client_socket.recv(4096)
-            if not packet:
-                break
-            data += packet
-
-        packed_msg_size = data[:payload_size]
-        data = data[payload_size:]
-        msg_size = struct.unpack("Q", packed_msg_size)[0]
-
-        while len(data) < msg_size:
-            data += client_socket.recv(4096)
-
-        frame_data = data[:msg_size]
-        data = data[msg_size:]
-
-        frame = np.frombuffer(frame_data, np.uint8)
-        frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
-
-        cv2.imshow("Stream de Vídeo", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        ret, frame = cap.read()
+        if not ret:
             break
 
+        # Codificar o quadro em formato JPEG
+        _, frame_encoded = cv2.imencode('.jpg', frame)
+        data = pickle.dumps(frame_encoded)
+
+        # Enviar o tamanho do quadro e o quadro
+        message_size = struct.pack("Q", len(data))
+        client_socket.sendall(message_size + data)
+
     client_socket.close()
-    cv2.destroyAllWindows()
+    cap.release()
 
 if __name__ == "__main__":
     start_video_server()
