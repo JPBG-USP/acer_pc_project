@@ -12,27 +12,38 @@ def start_video_client(server_ip, server_port):
     payload_size = struct.calcsize("Q")
 
     while True:
-        while len(data) < payload_size:
-            packet = client_socket.recv(4096)
-            if not packet:
+        try:
+            # Certifique-se de que recebemos o tamanho completo da mensagem
+            while len(data) < payload_size:
+                packet = client_socket.recv(4096)
+                if not packet:
+                    break
+                data += packet
+
+            if len(data) < payload_size:
+                print("Conexão fechada pelo servidor.")
                 break
-            data += packet
 
-        packed_msg_size = data[:payload_size]
-        data = data[payload_size:]
-        msg_size = struct.unpack("Q", packed_msg_size)[0]
+            packed_msg_size = data[:payload_size]
+            data = data[payload_size:]
+            msg_size = struct.unpack("Q", packed_msg_size)[0]
 
-        while len(data) < msg_size:
-            data += client_socket.recv(4096)
+            # Receber o quadro completo
+            while len(data) < msg_size:
+                data += client_socket.recv(4096)
 
-        frame_data = data[:msg_size]
-        data = data[msg_size:]
+            frame_data = data[:msg_size]
+            data = data[msg_size:]
 
-        frame = pickle.loads(frame_data)
-        frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+            frame = pickle.loads(frame_data)
+            frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
 
-        cv2.imshow("Cliente Streaming", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.imshow("Cliente Streaming", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        except Exception as e:
+            print(f"Erro durante o streaming: {e}")
             break
 
     client_socket.close()
